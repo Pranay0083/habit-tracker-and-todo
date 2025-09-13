@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+# Case Study: All-in-One Productivity App for Task and Habit Management
 
-First, run the development server:
+# Why I'm Building This Productivity App
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## My Motivation
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+I've always struggled to find a single tool that helps me manage both my daily habits and my bigger projects in one place. Most apps either focus on to-dos or habit tracking, but rarely both—and almost never in a way that feels truly integrated or motivating. I wanted something that could help me see the big picture and the small steps, keep me accountable, and give me real insights into my progress.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## What This App Helps With
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This app is my attempt to solve my own productivity challenges:
 
-## Learn More
+- **Stay on Track:** I can see my daily tasks and habits together, so nothing slips through the cracks.
+- **Break Down Big Goals:** I can break large projects into smaller, manageable steps, and actually see my progress as I complete sub-tasks.
+- **Build Consistency:** Tracking habits alongside tasks helps me build routines and stay consistent over time.
+- **Get Real Insights:** Visual summaries and analytics help me understand when I'm most productive and what I tend to procrastinate on.
 
-To learn more about Next.js, take a look at the following resources:
+## What the App Includes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Daily View
+- My home screen for the day: shows today's habits, to-dos, and a quick progress summary (like "3/5 habits complete").
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### To-Dos
+- A project management hub where I can create tasks, break them into unlimited sub-tasks, set due dates and priorities, and add notes. Parent tasks show progress bars that update as I finish sub-tasks.
 
-## Deploy on Vercel
+### Habits
+- A dedicated section for all my habits, with streaks, micro-graphs for recent history, and detailed stats like best streak, completion rate, and average frequency. I can easily add new habits, set how often I want to do them, and add reminders.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Data & Insights
+- The app generates graphs for daily/weekly completion rates and project progress. It also gives me actionable insights, like highlighting my most productive days and showing which tasks I tend to put off.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+This project is a personal journey to build the productivity system I've always wanted. If it helps others too, that's even better!
