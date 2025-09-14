@@ -2,6 +2,8 @@
 
 import React, { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { DataService } from "@/lib/data";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ChartSpline,
   ChartBarIncreasing,
@@ -60,7 +62,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 
-type HabitFrequency = "daily" | "weekly" | "custom";
+type HabitFrequency = "daily" | "weekly" | "monthly";
 
 export type Habit = {
   id: string;
@@ -171,40 +173,7 @@ function buildMicroSeries(habit: Habit, days = 14) {
   return keys.map((k) => ({ date: k, done: set.has(k) }));
 }
 
-const defaultDemoHabits: Habit[] = [
-  {
-    id: "h1",
-    name: "Morning Run",
-    category: "Health",
-    frequency: "daily",
-    reminder: "07:00",
-    history: lastNDays(21)
-      .filter((_, i) => i % 2 === 0 || i > 15)
-      .map((k) => k),
-    color: "#6f5ae8",
-  },
-  {
-    id: "h2",
-    name: "Read 20 pages",
-    category: "Learning",
-    frequency: "daily",
-    reminder: "20:30",
-    history: lastNDays(21)
-      .filter((_, i) => i % 3 !== 0)
-      .map((k) => k),
-    color: "#6366f1",
-  },
-  {
-    id: "h3",
-    name: "Weekly Planning",
-    category: "Work",
-    frequency: "weekly",
-    history: lastNDays(70)
-      .filter((_, i) => i % 7 === 2)
-      .map((k) => k),
-    color: "#8b5cf6",
-  },
-];
+
 
 function MiniCompletionGraph({
   habit,
@@ -593,7 +562,7 @@ function HabitDetailDialog({
                     <SelectContent>
                       <SelectItem value="daily">Daily</SelectItem>
                       <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -724,9 +693,17 @@ export default function HabitsSection({
   habits: habitsProp,
   onChange,
 }: HabitsSectionProps) {
+  const { user } = useAuth();
   const [habits, setHabits] = useState<Habit[]>(
-    habitsProp && habitsProp.length ? habitsProp : defaultDemoHabits
+    habitsProp || []
   );
+
+  // Sync with props when they change
+  React.useEffect(() => {
+    if (habitsProp) {
+      setHabits(habitsProp);
+    }
+  }, [habitsProp]);
 
   const update = useCallback(
     (next: Habit[]) => {
@@ -737,36 +714,54 @@ export default function HabitsSection({
   );
 
   const toggleToday = useCallback(
-    (id: string) => {
+    async (id: string) => {
+      if (!user) {
+        toast.error("User not authenticated");
+        return;
+      }
+      
       const key = todayISO();
-      update(
-        habits.map((h) => {
-          if (h.id !== id) return h;
-          const has = h.history.includes(key);
-          const nextHistory = has
-            ? h.history.filter((d) => d !== key)
-            : ensureUnique([...h.history, key]).sort();
-          const next = { ...h, history: nextHistory };
-          const streak = calcStreak(nextHistory, h.frequency);
+      const habit = habits.find(h => h.id === id);
+      if (!habit) return;
+      
+      const has = habit.history.includes(key);
+      const nextHistory = has
+        ? habit.history.filter((d) => d !== key)
+        : ensureUnique([...habit.history, key]).sort();
+      
+      try {
+        // Update backend first
+        await DataService.updateHabit(user.id, id, { history: nextHistory });
+        
+        // Update local state
+        update(
+          habits.map((h) => {
+            if (h.id !== id) return h;
+            const next = { ...h, history: nextHistory };
+            const streak = calcStreak(nextHistory, h.frequency);
 
-          if (!has) {
-            if (streak === 1) {
-              toast.success(`Nice start on "${h.name}"!`);
-            } else if (streak === 7) {
-              toast.success("7-day streak! Keep the momentum going!");
-            } else if (streak === 30) {
-              toast.success("30 days strong! You're building a powerful habit.");
+            if (!has) {
+              if (streak === 1) {
+                toast.success(`Nice start on "${h.name}"!`);
+              } else if (streak === 7) {
+                toast.success("7-day streak! Keep the momentum going!");
+              } else if (streak === 30) {
+                toast.success("30 days strong! You're building a powerful habit.");
+              } else {
+                toast.success("Completed for today");
+              }
             } else {
-              toast.success("Completed for today");
+              toast.message("Unmarked today's completion");
             }
-          } else {
-            toast.message("Unmarked today's completion");
-          }
-          return next;
-        })
-      );
+            return next;
+          })
+        );
+      } catch (error) {
+        console.error('Error updating habit:', error);
+        toast.error("Failed to update habit");
+      }
     },
-    [habits, update]
+    [habits, update, user]
   );
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -779,37 +774,85 @@ export default function HabitsSection({
     history: [],
   });
 
-  const addHabit = () => {
+  const addHabit = async () => {
     const name = newHabit.name.trim();
     if (!name) {
       toast.error("Please enter a habit name");
       return;
     }
-    const id = `h_${Math.random().toString(36).slice(2, 9)}`;
-    const created: Habit = {
-      ...newHabit,
-      id,
-      history: [],
-      color: "#6f5ae8",
-    };
-    update([created, ...habits]);
-    setNewHabit({
-      id: "",
-      name: "",
-      category: "",
-      frequency: "daily",
-      reminder: "",
-      history: [],
-    });
-    setCreateOpen(false);
-    toast.success(`Created "${name}"`);
+    
+    if (!user) {
+      toast.error("User not authenticated");
+      return;
+    }
+    
+    try {
+      const created: Habit = {
+        ...newHabit,
+        id: `h_${Math.random().toString(36).slice(2, 9)}`,
+        history: [],
+        color: "#6f5ae8",
+      };
+      
+      // Add to DataService
+      const createdHabit = await DataService.createHabit({
+        name: created.name,
+        category: created.category || "",
+        frequency: created.frequency,
+        reminder: created.reminder,
+        color: created.color || "#6f5ae8"
+      });
+      
+      // Update local state with the created habit from server
+      update([createdHabit, ...habits]);
+      
+      setNewHabit({
+        id: "",
+        name: "",
+        category: "",
+        frequency: "daily",
+        reminder: "",
+        history: [],
+      });
+      setCreateOpen(false);
+      toast.success(`Created "${name}"`);
+    } catch (error) {
+      console.error('Error creating habit:', error);
+      toast.error("Failed to create habit");
+    }
   };
 
-  const updateHabit = (next: Habit) => {
-    update(habits.map((h) => (h.id === next.id ? next : h)));
+  const updateHabit = async (next: Habit) => {
+    if (!user) {
+      toast.error("User not authenticated");
+      return;
+    }
+    
+    try {
+      // Update in DataService
+      await DataService.updateHabit(user.id, next.id, next);
+      // Update local state
+      update(habits.map((h) => (h.id === next.id ? next : h)));
+    } catch (error) {
+      console.error('Error updating habit:', error);
+      toast.error("Failed to update habit");
+    }
   };
-  const deleteHabit = (id: string) => {
-    update(habits.filter((h) => h.id !== id));
+  const deleteHabit = async (id: string) => {
+    if (!user) {
+      toast.error("User not authenticated");
+      return;
+    }
+    
+    try {
+      // Delete from DataService
+      await DataService.deleteHabit(id);
+      // Update local state
+      update(habits.filter((h) => h.id !== id));
+    } catch (error) {
+      console.error('Error deleting habit:', error);
+      toast.error("Failed to delete habit");
+    }
   };
 
   const empty = !isLoading && habits.length === 0;
@@ -864,7 +907,7 @@ export default function HabitsSection({
                       <SelectContent>
                         <SelectItem value="daily">Daily</SelectItem>
                         <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="custom">Custom</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
