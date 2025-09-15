@@ -260,22 +260,6 @@ export default function Page() {
           <main className="min-w-0 pb-24 md:pb-0">
             {section === "daily" && (
               <div className="grid gap-4 sm:gap-6">
-                <div className="rounded-lg border border-border bg-card px-4 py-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <h1 className="text-lg sm:text-xl font-semibold">Daily Overview</h1>
-                      <p className="text-sm text-muted-foreground">Your habits and tasks for today</p>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date().toLocaleDateString(undefined, {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                  </div>
-                </div>
 
                 <DailyView
                   habits={dailyHabits}
