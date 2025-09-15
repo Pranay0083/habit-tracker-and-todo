@@ -144,15 +144,14 @@ export default function DailyView({
   return (
     <section
       className={clsx(
-        "w-full max-w-full",
-        "grid gap-4 sm:gap-6",
-        // Stack on mobile, grid on larger screens
-        "md:grid-cols-2 xl:grid-cols-3",
+        "w-full max-w-full space-y-4 sm:space-y-6",
         className
       )}
       style={style}
       aria-label="Today's overview"
     >
+      {/* Top row: Habits and Todos side by side */}
+      <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
       {/* Habits Card */}
       <Card className="bg-card shadow-sm">
         <CardHeader className="space-y-1">
@@ -299,18 +298,19 @@ export default function DailyView({
           )}
         </CardContent>
       </Card>
+      </div>
 
-      {/* Progress Summary Card */}
-      <Card className="bg-card shadow-sm md:col-span-2 xl:col-span-1">
+      {/* Bottom row: Full-width Progress Chart */}
+      <Card className="bg-card shadow-sm">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-2">
             <div className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-accent text-accent-foreground">
               <ChartNoAxesGantt className="h-4 w-4" aria-hidden="true" />
             </div>
-            <CardTitle className="text-base sm:text-lg">Today&apos;s Progress</CardTitle>
+            <CardTitle className="text-base sm:text-lg">Progress Overview</CardTitle>
           </div>
           <CardDescription className="text-muted-foreground">
-            Completion trends and what&apos;s remaining
+            Completion trends and daily progress summary
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-2">

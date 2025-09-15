@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ListTodo, TableOfContents } from "lucide-react";
 import { toast } from "sonner";
+import { DataService } from "@/lib/data";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -222,17 +224,50 @@ export default function TodosSection({
   defaultExpanded = true,
   enableInlineDetail = false,
 }: TodosSectionProps) {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>(
     initialTasks && initialTasks.length
       ? cloneTasks(initialTasks)
       : []
   );
+  const [isLoading, setIsLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({ priority: "all", status: "all" });
   const [sortBy, setSortBy] = useState<SortBy>("dueAsc");
   const [search, setSearch] = useState("");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+
+  // Load todos from backend
+  useEffect(() => {
+    const loadTodos = async () => {
+      if (!user) return;
+      
+      try {
+        setIsLoading(true);
+        const userTodos = await DataService.getUserTodos(user.id);
+        
+        // Convert backend todos to the component's Task format
+        const convertedTasks: Task[] = userTodos.map(todo => ({
+          id: todo.id,
+          title: todo.title,
+          notes: '', // Backend doesn't have notes field yet
+          priority: todo.priority,
+          completed: todo.completed,
+          children: []
+        }));
+        
+        setTasks(convertedTasks);
+      } catch (error) {
+        console.error('Error loading todos:', error);
+        toast.error('Failed to load todos');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadTodos();
+  }, [user]);
 
   // Initialize expanded state
   useEffect(() => {
@@ -266,13 +301,24 @@ export default function TodosSection({
     });
   }, []);
 
-  const onToggleComplete = useCallback((id: string, checked: boolean) => {
-    setTasks((prev) =>
-      updateTaskById(prev, id, (t) => {
-        return { ...t, completed: checked };
-      })
-    );
-  }, []);
+  const onToggleComplete = useCallback(async (id: string, checked: boolean) => {
+    if (!user) return;
+    
+    try {
+      // Update backend
+      await DataService.updateTodo(user.id, id, { completed: checked });
+      
+      // Update local state
+      setTasks((prev) =>
+        updateTaskById(prev, id, (t) => {
+          return { ...t, completed: checked };
+        })
+      );
+    } catch (error) {
+      console.error('Error updating todo:', error);
+      toast.error('Failed to update task');
+    }
+  }, [user]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -323,30 +369,63 @@ export default function TodosSection({
       toast.error("Please enter a title");
       return;
     }
-    setLoadingAction("create");
-    await new Promise((r) => setTimeout(r, 400));
-    const newTask: Task = {
-      id: genId(),
-      title: formState.title.trim(),
-      notes: formState.notes?.trim() || "",
-      dueDate: formState.dueDate || undefined,
-      priority: formState.priority,
-      completed: false,
-      children: [],
-    };
-    setTasks((prev) => {
+    
+    if (!user) {
+      toast.error("User not authenticated");
+      return;
+    }
+
+    try {
+      setLoadingAction("create");
+      
+      let newTask: Task;
+      
       if (formState.parentId === null) {
-        return [...prev, newTask];
+        // Create top-level todo in backend
+        const createdTodo = await DataService.createTodo({
+          title: formState.title.trim(),
+          priority: formState.priority
+        });
+        
+        // Convert to Task format
+        newTask = {
+          id: createdTodo.id,
+          title: createdTodo.title,
+          notes: "",
+          priority: createdTodo.priority,
+          completed: createdTodo.completed,
+          children: [],
+        };
+        
+        setTasks((prev) => [...prev, newTask]);
+      } else {
+        // Create subtask locally (not persisted to backend yet)
+        newTask = {
+          id: `subtask_${Math.random().toString(36).slice(2, 9)}`,
+          title: formState.title.trim(),
+          notes: formState.notes?.trim() || "",
+          priority: formState.priority,
+          completed: false,
+          children: [],
+        };
+        
+        // Insert into parent children
+        setTasks((prev) => {
+          return updateTaskById(prev, formState.parentId!, (t) => ({
+            ...t,
+            children: [...(t.children || []), newTask],
+          }));
+        });
       }
-      // insert into parent children
-      return updateTaskById(prev, formState.parentId!, (t) => ({
-        ...t,
-        children: [...(t.children || []), newTask],
-      }));
-    });
-    setLoadingAction(null);
-    setCreateOpen(false);
-    toast.success("Task created");
+      setCreateOpen(false);
+      resetForm();
+      toast.success("Task created");
+    } catch (error) {
+      console.error('Error creating todo:', error);
+      toast.error("Failed to create task");
+    } finally {
+      setLoadingAction(null);
+    }
   };
 
   const handleEdit = async () => {
@@ -374,13 +453,25 @@ export default function TodosSection({
   const requestDelete = (id: string) => setDeleteConfirm({ open: true, id });
 
   const handleDelete = async () => {
-    if (!deleteConfirm.id) return;
-    setLoadingAction("delete");
-    await new Promise((r) => setTimeout(r, 350));
-    setTasks((prev) => deleteTaskById(prev, deleteConfirm.id!));
-    setLoadingAction(null);
-    setDeleteConfirm({ open: false, id: undefined });
-    toast.success("Task deleted");
+    if (!deleteConfirm.id || !user) return;
+    
+    try {
+      setLoadingAction("delete");
+      
+      // Delete from backend
+      await DataService.deleteTodo(deleteConfirm.id);
+      
+      // Update local state
+      setTasks((prev) => deleteTaskById(prev, deleteConfirm.id!));
+      
+      setDeleteConfirm({ open: false, id: undefined });
+      toast.success("Task deleted");
+    } catch (error) {
+      console.error('Error deleting todo:', error);
+      toast.error("Failed to delete task");
+    } finally {
+      setLoadingAction(null);
+    }
   };
 
   const [dragState, setDragState] = useState<{ dragId?: string; parentId: string | null; index: number } | null>(null);

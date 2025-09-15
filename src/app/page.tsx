@@ -5,7 +5,11 @@ import Navigation from "@/components/Navigation";
 import DailyView from "@/components/DailyView";
 import TodosSection from "@/components/TodosSection";
 import HabitsSection, { type Habit as HabitModel } from "@/components/HabitsSection";
-import { Sun, Moon } from "lucide-react";
+import LoginForm from "@/components/LoginForm";
+import { useAuth } from "@/contexts/AuthContext";
+import { Sun, Moon, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DataService } from "@/lib/data";
 
 type NavValue = "daily" | "todos" | "habits";
 
@@ -28,55 +32,24 @@ function todayISO() {
   return d.toISOString().slice(0, 10);
 }
 
-const initialHabits: HabitModel[] = [
-  {
-    id: "h1",
-    name: "Morning Run",
-    category: "Health",
-    frequency: "daily",
-    reminder: "07:00",
-    history: [],
-    color: "#6f5ae8",
-  },
-  {
-    id: "h2",
-    name: "Read 20 pages",
-    category: "Learning",
-    frequency: "daily",
-    reminder: "20:30",
-    history: [],
-    color: "#6366f1",
-  },
-  {
-    id: "h3",
-    name: "Weekly Planning",
-    category: "Work",
-    frequency: "weekly",
-    reminder: "",
-    history: [],
-    color: "#8b5cf6",
-  },
-];
-
-const initialTodayTodos: DailyTodo[] = [
-  { id: "t1", title: "Plan sprint backlog", completed: false, priority: "high" },
-  { id: "t2", title: "Write project update", completed: false, priority: "medium" },
-  { id: "t3", title: "Inbox zero", completed: true, priority: "low" },
-];
 
 export default function Page() {
+  // ALL HOOKS MUST BE DECLARED AT THE TOP - NEVER CONDITIONALLY
+  const { user, isAuthenticated, isLoading, login, signup, logout } = useAuth();
   const [section, setSection] = React.useState<NavValue>("daily");
-
+  
   // Shared app state: habits persist across sections
-  const [habits, setHabits] = React.useState<HabitModel[]>(initialHabits);
+  const [habits, setHabits] = React.useState<HabitModel[]>([]);
 
   // Daily-only lightweight todos for the dashboard
-  const [todayTodos, setTodayTodos] = React.useState<DailyTodo[]>(initialTodayTodos);
+  const [todayTodos, setTodayTodos] = React.useState<DailyTodo[]>([]);
 
   const today = React.useMemo(() => todayISO(), []);
 
   // Theme state
   const [isDark, setIsDark] = React.useState(false);
+
+  // Theme state initialization
   React.useEffect(() => {
     const stored = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
     const prefersDark = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -84,6 +57,34 @@ export default function Page() {
     setIsDark(nextDark);
     document.documentElement.classList.toggle("dark", nextDark);
   }, []);
+
+  // Initialize user-specific data
+  React.useEffect(() => {
+    if (user) {
+      const initializeData = async () => {
+        try {
+          // await DataService.initializeSampleData(user.id);
+          const userHabits = await DataService.getUserHabits(user.id);
+          setHabits(userHabits as HabitModel[]);
+          
+          // Convert todos to daily todos format
+          const userTodos = await DataService.getUserTodos(user.id);
+          const dailyTodos: DailyTodo[] = userTodos.map(todo => ({
+            id: todo.id,
+            title: todo.title,
+            completed: todo.completed,
+            priority: todo.priority,
+          }));
+          setTodayTodos(dailyTodos);
+        } catch (error) {
+          console.error('Error loading user data:', error);
+        }
+      };
+      
+      initializeData();
+    }
+  }, [user]);
+
   const toggleTheme = React.useCallback(() => {
     setIsDark((prev) => {
       const next = !prev;
@@ -101,25 +102,79 @@ export default function Page() {
     }));
   }, [habits, today]);
 
-  const handleToggleHabitToday = React.useCallback((habitId: string, next: boolean) => {
+  const handleToggleHabitToday = React.useCallback(async (habitId: string, next: boolean) => {
+    if (!user) return;
+    
+    // Optimistically update the UI
     setHabits((prev) =>
       prev.map((h) => {
         if (h.id !== habitId) return h;
         const has = h.history.includes(today);
+        let updatedHabit = h;
+        
         if (next && !has) {
-          return { ...h, history: [...h.history, today].sort() };
+          updatedHabit = { ...h, history: [...h.history, today].sort() };
         }
         if (!next && has) {
-          return { ...h, history: h.history.filter((d) => d !== today) };
+          updatedHabit = { ...h, history: h.history.filter((d) => d !== today) };
         }
-        return h;
+        
+        return updatedHabit;
       })
     );
-  }, [today]);
 
-  const handleToggleTodoToday = React.useCallback((todoId: string, next: boolean) => {
-    setTodayTodos((prev) => prev.map((t) => (t.id === todoId ? { ...t, completed: next } : t)));
-  }, []);
+    try {
+      // Find the habit to update
+      const habit = habits.find(h => h.id === habitId);
+      if (!habit) return;
+      
+      const has = habit.history.includes(today);
+      let newHistory = habit.history;
+      
+      if (next && !has) {
+        newHistory = [...habit.history, today].sort();
+      }
+      if (!next && has) {
+        newHistory = habit.history.filter((d) => d !== today);
+      }
+      
+      // Persist to database
+      await DataService.updateHabit(user.id, habitId, { history: newHistory });
+    } catch (error) {
+      console.error('Error updating habit:', error);
+      // Revert the optimistic update on error
+      const userHabits = await DataService.getUserHabits(user.id);
+      setHabits(userHabits as HabitModel[]);
+    }
+  }, [today, user, habits]);
+
+  const handleToggleTodoToday = React.useCallback(async (todoId: string, next: boolean) => {
+    if (!user) return;
+    
+    // Optimistically update the UI
+    setTodayTodos((prev) => prev.map((t) => {
+      if (t.id === todoId) {
+        return { ...t, completed: next };
+      }
+      return t;
+    }));
+
+    try {
+      // Persist to database
+      await DataService.updateTodo(user.id, todoId, { completed: next });
+    } catch (error) {
+      console.error('Error updating todo:', error);
+      // Revert the optimistic update on error
+      const userTodos = await DataService.getUserTodos(user.id);
+      const dailyTodos: DailyTodo[] = userTodos.map(todo => ({
+        id: todo.id,
+        title: todo.title,
+        completed: todo.completed,
+        priority: todo.priority,
+      }));
+      setTodayTodos(dailyTodos);
+    }
+  }, [user]);
 
   const dailyStats = React.useMemo(() => {
     const habitsCompleted = dailyHabits.filter((h) => h.completed).length;
@@ -128,6 +183,32 @@ export default function Page() {
     const todosTotal = todayTodos.length;
     return { habitsCompleted, habitsTotal, todosCompleted, todosTotal };
   }, [dailyHabits, todayTodos]);
+
+  // Handle authentication
+  const handleLogin = async (username: string, password: string, rememberMe: boolean) => {
+    await login({ username, password, rememberMe });
+  };
+
+  const handleSignup = async (username: string, password: string, confirmPassword: string) => {
+    await signup({ username, password, confirmPassword });
+  };
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return <LoginForm onLogin={handleLogin} onSignup={handleSignup} />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -141,8 +222,17 @@ export default function Page() {
           </div>
           <div className="flex items-center gap-3">
             <div className="text-xs text-muted-foreground hidden sm:block">
-              Stay organized. Build better habits.
+              Welcome, {user?.username}
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="flex items-center gap-2 text-xs"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </Button>
             <button
               type="button"
               onClick={toggleTheme}
