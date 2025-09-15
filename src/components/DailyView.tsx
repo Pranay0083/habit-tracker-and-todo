@@ -42,6 +42,10 @@ export interface DailyViewProps {
   onToggleTodo?: (todoId: string, next: boolean) => Promise<void> | void
   emptyHabitsHint?: string
   emptyTodosHint?: string
+  headerNote?: string
+  readOnly?: boolean
+  habitTrendSeries?: number[]
+  todoTrendSeries?: number[]
 }
 
 function clsx(...args: Array<string | false | null | undefined>) {
@@ -59,6 +63,10 @@ export default function DailyView({
   onToggleTodo,
   emptyHabitsHint = "No habits scheduled for today. Create one in the Habits section.",
   emptyTodosHint = "No to-dos for today. Add tasks in the To-Dos section.",
+  headerNote,
+  readOnly = false,
+  habitTrendSeries,
+  todoTrendSeries,
 }: DailyViewProps) {
   const [localHabits, setLocalHabits] = React.useState<Habit[]>(habits)
   const [localTodos, setLocalTodos] = React.useState<Todo[]>(todos)
@@ -126,20 +134,9 @@ export default function DailyView({
     (derivedStats.habitsTotal - derivedStats.habitsCompleted) +
     (derivedStats.todosTotal - derivedStats.todosCompleted)
 
-  // Build simple 7-point trend ending at today's percentage
-  const buildTrend = React.useCallback((pct: number) => {
-    const points: number[] = []
-    for (let i = 0; i < 7; i++) {
-      const t = (i + 1) / 7 // 1/7 .. 1
-      // ease-out quad
-      const eased = 1 - Math.pow(1 - t, 2)
-      points.push(Math.max(0, Math.min(100, Math.round(eased * pct))))
-    }
-    return points
-  }, [])
-
-  const habitTrend = React.useMemo(() => buildTrend(habitPct), [buildTrend, habitPct])
-  const todoTrend = React.useMemo(() => buildTrend(todoPct), [buildTrend, todoPct])
+  // Trends are provided by parent (last 7 days including today)
+  const habitTrend = habitTrendSeries ?? []
+  const todoTrend = todoTrendSeries ?? []
 
   return (
     <section
@@ -152,6 +149,13 @@ export default function DailyView({
     >
       {/* Top row: Habits and Todos side by side */}
       <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+      {headerNote && (
+        <div className="md:col-span-2 -mt-2">
+          <div className="rounded-md border border-dashed border-input bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            {headerNote}
+          </div>
+        </div>
+      )}
       {/* Habits Card */}
       <Card className="bg-card shadow-sm">
         <CardHeader className="space-y-1">
@@ -189,24 +193,28 @@ export default function DailyView({
                 <li key={habit.id}>
                   <button
                     type="button"
-                    onClick={() => handleToggleHabit(habit.id, !habit.completed)}
+                    onClick={() => {
+                      if (readOnly) return;
+                      handleToggleHabit(habit.id, !habit.completed);
+                    }}
                     className={clsx(
                       "w-full",
                       "group inline-flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-left transition-colors",
                       "hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     )}
-                    aria-pressed={habit.completed ? "true" : "false"}
+                    aria-pressed={habit.completed}
                     aria-label={`Mark habit "${habit.name}" as ${habit.completed ? "incomplete" : "complete"}`}
-                    disabled={isToggling[habit.id]}
+                    disabled={readOnly || isToggling[habit.id]}
                   >
                     <Checkbox
                       checked={habit.completed}
-                      onCheckedChange={(checked) =>
-                        handleToggleHabit(habit.id, Boolean(checked))
-                      }
+                      onCheckedChange={(checked) => {
+                        if (readOnly) return;
+                        handleToggleHabit(habit.id, Boolean(checked));
+                      }}
                       aria-label={habit.completed ? "Completed" : "Not completed"}
                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      disabled={isToggling[habit.id]}
+                      disabled={readOnly || isToggling[habit.id]}
                     />
                     <span className={clsx("min-w-0 flex-1 truncate", habit.completed && "text-muted-foreground line-through")}>
                       {habit.name}
@@ -272,10 +280,13 @@ export default function DailyView({
                   >
                     <Checkbox
                       checked={todo.completed}
-                      onCheckedChange={(checked) => handleToggleTodo(todo.id, Boolean(checked))}
+                      onCheckedChange={(checked) => {
+                        if (readOnly) return;
+                        handleToggleTodo(todo.id, Boolean(checked));
+                      }}
                       aria-label={todo.completed ? "Completed" : "Not completed"}
                       className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      disabled={isToggling[todo.id]}
+                      disabled={readOnly || isToggling[todo.id]}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
@@ -329,12 +340,14 @@ export default function DailyView({
                   series={[
                     { label: "Habits", color: "var(--chart-1)", data: habitTrend },
                     { label: "To-Dos", color: "var(--chart-2)", data: todoTrend },
-                  ]}
+                  ].filter((s) => s.data && s.data.length > 0)}
                   height={160}
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                  <Legend color="var(--chart-1)" label="Habits" value={`${habitPct}%`} detail={`${derivedStats.habitsCompleted}/${derivedStats.habitsTotal}`} />
-                  <Legend color="var(--chart-2)" label="To-Dos" value={`${todoPct}%`} detail={`${derivedStats.todosCompleted}/${derivedStats.todosTotal}`} />
+                  <Legend dotClass="bg-[var(--chart-1)]" label="Habits" value={`${habitPct}%`} detail={`${derivedStats.habitsCompleted}/${derivedStats.habitsTotal}`} />
+                  {todoTrend.length > 0 && (
+                    <Legend dotClass="bg-[var(--chart-2)]" label="To-Dos" value={`${todoPct}%`} detail={`${derivedStats.todosCompleted}/${derivedStats.todosTotal}`} />
+                  )}
                 </div>
               </div>
 
@@ -383,20 +396,16 @@ function EmptyState({
 function PriorityBadge({ priority }: { priority: TodoPriority }) {
   const label =
     priority === "high" ? "High" : priority === "medium" ? "Medium" : "Low"
-  const colorVar =
+  const dotClass =
     priority === "high"
-      ? "var(--chart-1)"
+      ? "bg-[var(--chart-1)]"
       : priority === "medium"
-        ? "var(--chart-2)"
-        : "var(--chart-3)"
+        ? "bg-[var(--chart-2)]"
+        : "bg-[var(--chart-3)]"
 
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-foreground">
-      <span
-        aria-hidden="true"
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: colorVar }}
-      />
+      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
       {label}
     </span>
   )
@@ -426,7 +435,7 @@ function MiniLineChart({
       .join(" ")
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-40 w-full" role="img" aria-label="Completion trends over the last 7 points">
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-40 w-full" role="img" aria-label="Completion trends over the last 7 days">
       {/* Grid */}
       {gridY.map((gy) => (
         <line
@@ -459,10 +468,10 @@ function MiniLineChart({
   )
 }
 
-function Legend({ color, label, value, detail }: { color: string; label: string; value: string; detail?: string }) {
+function Legend({ dotClass, label, value, detail }: { dotClass: string; label: string; value: string; detail?: string }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5">
-      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
+      <span className={`h-2 w-2 rounded-full ${dotClass}`} aria-hidden="true" />
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-sm font-medium">{value}</span>
       {detail ? <span className="text-xs text-muted-foreground">({detail})</span> : null}
