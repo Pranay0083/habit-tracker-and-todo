@@ -45,6 +45,7 @@ export default function Page() {
   const [todayTodos, setTodayTodos] = React.useState<DailyTodo[]>([]);
 
   const today = React.useMemo(() => todayISO(), []);
+  const [selectedDate, setSelectedDate] = React.useState<string>(today);
 
   // Theme state
   const [isDark, setIsDark] = React.useState(false);
@@ -102,21 +103,31 @@ export default function Page() {
     }));
   }, [habits, today]);
 
+  const selectedDayHabits: DailyHabit[] = React.useMemo(() => {
+    return habits.map((h) => ({
+      id: h.id,
+      name: h.name,
+      completed: h.history.includes(selectedDate),
+    }));
+  }, [habits, selectedDate]);
+
   const handleToggleHabitToday = React.useCallback(async (habitId: string, next: boolean) => {
     if (!user) return;
+    // Disallow modifying historical days different from today
+    if (selectedDate !== today) return;
     
     // Optimistically update the UI
     setHabits((prev) =>
       prev.map((h) => {
         if (h.id !== habitId) return h;
-        const has = h.history.includes(today);
+        const has = h.history.includes(selectedDate);
         let updatedHabit = h;
         
         if (next && !has) {
-          updatedHabit = { ...h, history: [...h.history, today].sort() };
+          updatedHabit = { ...h, history: [...h.history, selectedDate].sort() };
         }
         if (!next && has) {
-          updatedHabit = { ...h, history: h.history.filter((d) => d !== today) };
+          updatedHabit = { ...h, history: h.history.filter((d) => d !== selectedDate) };
         }
         
         return updatedHabit;
@@ -128,14 +139,14 @@ export default function Page() {
       const habit = habits.find(h => h.id === habitId);
       if (!habit) return;
       
-      const has = habit.history.includes(today);
+      const has = habit.history.includes(selectedDate);
       let newHistory = habit.history;
       
       if (next && !has) {
-        newHistory = [...habit.history, today].sort();
+        newHistory = [...habit.history, selectedDate].sort();
       }
       if (!next && has) {
-        newHistory = habit.history.filter((d) => d !== today);
+        newHistory = habit.history.filter((d) => d !== selectedDate);
       }
       
       // Persist to database
@@ -146,10 +157,11 @@ export default function Page() {
       const userHabits = await DataService.getUserHabits(user.id);
       setHabits(userHabits as HabitModel[]);
     }
-  }, [today, user, habits]);
+  }, [today, selectedDate, user, habits]);
 
   const handleToggleTodoToday = React.useCallback(async (todoId: string, next: boolean) => {
     if (!user) return;
+    if (selectedDate !== today) return;
     
     // Optimistically update the UI
     setTodayTodos((prev) => prev.map((t) => {
@@ -174,7 +186,7 @@ export default function Page() {
       }));
       setTodayTodos(dailyTodos);
     }
-  }, [user]);
+  }, [user, today, selectedDate]);
 
   const dailyStats = React.useMemo(() => {
     const habitsCompleted = dailyHabits.filter((h) => h.completed).length;
@@ -183,6 +195,25 @@ export default function Page() {
     const todosTotal = todayTodos.length;
     return { habitsCompleted, habitsTotal, todosCompleted, todosTotal };
   }, [dailyHabits, todayTodos]);
+
+  // Build last 7 days (including selectedDate) habit productivity series
+  const habitTrendSeries = React.useMemo(() => {
+    const total = habits.length;
+    if (total === 0) return Array(7).fill(0);
+    // Helper to add days to an ISO date string (YYYY-MM-DD)
+    const addDaysISO = (iso: string, delta: number) => {
+      const d = new Date(iso);
+      d.setDate(d.getDate() + delta);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString().slice(0, 10);
+    };
+    // Oldest to newest: selectedDate -6 ... selectedDate
+    const days = Array.from({ length: 7 }, (_, i) => addDaysISO(selectedDate, i - 6));
+    return days.map((iso) => {
+      const done = habits.reduce((acc, h) => acc + (h.history.includes(iso) ? 1 : 0), 0);
+      return Math.round((done / total) * 100);
+    });
+  }, [habits, selectedDate]);
 
   // Handle authentication
   const handleLogin = async (username: string, password: string, rememberMe: boolean) => {
@@ -253,6 +284,8 @@ export default function Page() {
               aria-label="Primary"
               value={section}
               onValueChange={setSection}
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
               className="md:h-[calc(100vh-6rem)]"
             />
           </aside>
@@ -260,29 +293,15 @@ export default function Page() {
           <main className="min-w-0 pb-24 md:pb-0">
             {section === "daily" && (
               <div className="grid gap-4 sm:gap-6">
-                <div className="rounded-lg border border-border bg-card px-4 py-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <h1 className="text-lg sm:text-xl font-semibold">Daily Overview</h1>
-                      <p className="text-sm text-muted-foreground">Your habits and tasks for today</p>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date().toLocaleDateString(undefined, {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                  </div>
-                </div>
 
                 <DailyView
-                  habits={dailyHabits}
+                  habits={selectedDayHabits}
                   todos={todayTodos}
-                  stats={dailyStats}
                   onToggleHabit={(id, next) => handleToggleHabitToday(id, next)}
                   onToggleTodo={(id, next) => handleToggleTodoToday(id, next)}
+                  readOnly={selectedDate !== today}
+                  headerNote={selectedDate !== today ? `Viewing ${new Date(selectedDate).toLocaleDateString()} (read-only)` : undefined}
+                  habitTrendSeries={habitTrendSeries}
                 />
               </div>
             )}
