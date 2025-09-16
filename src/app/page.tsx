@@ -26,10 +26,22 @@ type DailyTodo = {
   priority: "high" | "medium" | "low";
 };
 
+function toLocalISODate(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseISODateLocal(iso: string) {
+  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 function todayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 }
 
 
@@ -202,10 +214,10 @@ export default function Page() {
     if (total === 0) return Array(7).fill(0);
     // Helper to add days to an ISO date string (YYYY-MM-DD)
     const addDaysISO = (iso: string, delta: number) => {
-      const d = new Date(iso);
+      const d = parseISODateLocal(iso);
       d.setDate(d.getDate() + delta);
       d.setHours(0, 0, 0, 0);
-      return d.toISOString().slice(0, 10);
+      return toLocalISODate(d);
     };
     // Oldest to newest: selectedDate -6 ... selectedDate
     const days = Array.from({ length: 7 }, (_, i) => addDaysISO(selectedDate, i - 6));
@@ -214,6 +226,13 @@ export default function Page() {
       return Math.round((done / total) * 100);
     });
   }, [habits, selectedDate]);
+
+  // Build simple To-Dos series (today's completion repeated across 7 points)
+  const todoTrendSeries = React.useMemo(() => {
+    const total = todayTodos.length;
+    const pct = total > 0 ? Math.round((todayTodos.filter((t) => t.completed).length / total) * 100) : 0;
+    return Array(7).fill(pct);
+  }, [todayTodos]);
 
   // Handle authentication
   const handleLogin = async (username: string, password: string, rememberMe: boolean) => {
@@ -300,8 +319,9 @@ export default function Page() {
                   onToggleHabit={(id, next) => handleToggleHabitToday(id, next)}
                   onToggleTodo={(id, next) => handleToggleTodoToday(id, next)}
                   readOnly={selectedDate !== today}
-                  headerNote={selectedDate !== today ? `Viewing ${new Date(selectedDate).toLocaleDateString()} (read-only)` : undefined}
+                  headerNote={selectedDate !== today ? `Viewing ${parseISODateLocal(selectedDate).toLocaleDateString()} (read-only)` : undefined}
                   habitTrendSeries={habitTrendSeries}
+                  todoTrendSeries={todoTrendSeries}
                 />
               </div>
             )}

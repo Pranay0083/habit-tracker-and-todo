@@ -82,15 +82,25 @@ export type HabitsSectionProps = {
   onChange?: (next: Habit[]) => void;
 };
 
+function toLocalISODate(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+function parseISODateLocal(iso: string) {
+  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
 function todayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 }
 function dateISO(d: Date) {
   const dd = new Date(d);
   dd.setHours(0, 0, 0, 0);
-  return dd.toISOString().slice(0, 10);
+  return toLocalISODate(dd);
 }
 function addDays(date: Date, delta: number) {
   const d = new Date(date);

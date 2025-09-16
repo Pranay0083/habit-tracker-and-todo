@@ -31,15 +31,27 @@ const NAV_ITEMS: { value: NavValue; label: string; icon: React.ElementType }[] =
     { value: "habits", label: "Habits", icon: PanelBottomOpen },
   ];
 
+function toLocalISODate(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseISODateLocal(iso: string) {
+  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 function todayISO() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 }
 
 function formatReadable(iso: string) {
   try {
-    const d = new Date(iso);
+    const d = parseISODateLocal(iso);
     return d.toLocaleDateString(undefined, {
       weekday: "long",
       month: "long",
