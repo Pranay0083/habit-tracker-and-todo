@@ -157,7 +157,7 @@ export default function DailyView({
         </div>
       )}
       {/* Habits Card */}
-      <Card className="bg-card shadow-sm">
+  <Card className="bg-card shadow-sm h-[300px] sm:h-[340px] md:h-[360px] flex flex-col">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -174,9 +174,9 @@ export default function DailyView({
             Quick check-ins for your daily routines
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-2">
+        <CardContent className="pt-2 flex-1 overflow-hidden">
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-hidden">
               <Skeleton className="h-10 w-full rounded-md" />
               <Skeleton className="h-10 w-full rounded-md" />
               <Skeleton className="h-10 w-3/4 rounded-md" />
@@ -188,7 +188,7 @@ export default function DailyView({
               description={emptyHabitsHint}
             />
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-2 pr-1 h-full overflow-y-auto thin-scrollbar">
               {localHabits.map((habit) => (
                 <li key={habit.id}>
                   <button
@@ -238,7 +238,7 @@ export default function DailyView({
       </Card>
 
       {/* Todos Card */}
-      <Card className="bg-card shadow-sm">
+  <Card className="bg-card shadow-sm h-[300px] sm:h-[340px] md:h-[360px] flex flex-col">
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -255,9 +255,9 @@ export default function DailyView({
             Focus on your most important tasks
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-2">
+        <CardContent className="pt-2 flex-1 overflow-hidden">
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-hidden">
               <Skeleton className="h-12 w-full rounded-md" />
               <Skeleton className="h-12 w-full rounded-md" />
               <Skeleton className="h-12 w-2/3 rounded-md" />
@@ -269,7 +269,7 @@ export default function DailyView({
               description={emptyTodosHint}
             />
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-2 pr-1 h-full overflow-y-auto thin-scrollbar">
               {localTodos.map((todo) => (
                 <li key={todo.id} className="min-w-0">
                   <div
